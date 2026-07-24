@@ -24,6 +24,7 @@ import { StoryGraphTree } from "./pages/StoryGraphTree";
 const FlowView = lazy(() => import("./pages/FlowView"));
 const FilmWizard = lazy(() => import("./pages/FilmWizard"));
 import { LanguageSelector } from "./pages/LanguageSelector";
+import { LoginPage } from "./pages/LoginPage";
 import { BookSidebar, BookSidebarToggle } from "./components/chat/BookSidebar";
 import { useSSE } from "./hooks/use-sse";
 import { useSessionEvents } from "./hooks/use-session-events";
@@ -53,12 +54,34 @@ export function deriveStartupGate(input: {
   return input.projectError ? "error" : "loading";
 }
 
+export function deriveAuthGate(input: {
+  readonly authLoading: boolean;
+  readonly authError: string | null;
+  readonly authenticated: boolean;
+}): "loading" | "error" | "login" | "ready" {
+  if (input.authLoading) return "loading";
+  if (input.authError) return "error";
+  if (!input.authenticated) return "login";
+  return "ready";
+}
+
 export function App() {
   const { route, setRoute } = useHashRoute();
-  const sse = useSSE();
   const { theme, setTheme } = useTheme();
   const { t, lang: currentLang } = useI18n();
-  const { data: project, error: projectError, refetch: refetchProject } = useApi<{ language: string; languageExplicit: boolean }>("/project");
+  const {
+    data: auth,
+    loading: authLoading,
+    error: authError,
+    refetch: refetchAuth,
+  } = useApi<{ required: boolean; authenticated: boolean }>("/auth/status");
+  const authenticated = auth?.authenticated === true;
+  // Only open project/SSE after auth succeeds, so a missing cookie shows login
+  // instead of a permanent project-load error.
+  const { data: project, error: projectError, refetch: refetchProject } = useApi<{ language: string; languageExplicit: boolean }>(
+    authenticated ? "/project" : "",
+  );
+  const sse = useSSE(authenticated ? "/api/v1/events" : "");
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -124,6 +147,44 @@ export function App() {
       : route.page === "service-detail"
         ? "services"
         : route.page;
+
+  const authGate = deriveAuthGate({
+    authLoading,
+    authError,
+    authenticated,
+  });
+
+  if (authGate === "loading") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (authGate === "error") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-2xl border border-destructive/30 bg-destructive/5 p-6 space-y-4">
+          <div>
+            <h1 className="text-lg font-semibold text-destructive">无法验证访问状态 / Failed to check auth</h1>
+            <p className="mt-2 text-sm text-muted-foreground break-all">{authError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchAuth()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            重试 / Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authGate === "login") {
+    return <LoginPage onSuccess={() => { void refetchAuth(); }} />;
+  }
 
   const startupGate = deriveStartupGate({ ready, projectError });
 

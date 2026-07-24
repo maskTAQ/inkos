@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveActiveBookId, deriveStartupGate, isBookCreateChatRoute } from "./App";
+import { deriveActiveBookId, deriveAuthGate, deriveStartupGate, isBookCreateChatRoute } from "./App";
 
 describe("deriveActiveBookId", () => {
   it("returns the current book across book-centered routes", () => {
@@ -29,5 +29,14 @@ describe("deriveStartupGate", () => {
     expect(deriveStartupGate({ ready: false, projectError: null })).toBe("loading");
     expect(deriveStartupGate({ ready: false, projectError: "bad inkos.json" })).toBe("error");
     expect(deriveStartupGate({ ready: true, projectError: "later refetch failed" })).toBe("ready");
+  });
+});
+
+describe("deriveAuthGate", () => {
+  it("gates the app behind login until auth status succeeds", () => {
+    expect(deriveAuthGate({ authLoading: true, authError: null, authenticated: false })).toBe("loading");
+    expect(deriveAuthGate({ authLoading: false, authError: "down", authenticated: false })).toBe("error");
+    expect(deriveAuthGate({ authLoading: false, authError: null, authenticated: false })).toBe("login");
+    expect(deriveAuthGate({ authLoading: false, authError: null, authenticated: true })).toBe("ready");
   });
 });

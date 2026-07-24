@@ -130,6 +130,15 @@ import {
   saveStudioTaskSnapshot,
   type StudioTaskSnapshot,
 } from "./task-store.js";
+import {
+  STUDIO_AUTH_COOKIE,
+  deriveStudioAuthToken,
+  isAuthenticatedStudioSession,
+  isStudioAuthPublicPath,
+  loadStudioPassword,
+  safeEqualString,
+} from "./auth.js";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 
 // -- Studio server language (read per request from the project config's `language`) --
 
@@ -2733,6 +2742,75 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       { error: { code: "INTERNAL_ERROR", message: "Unexpected server error." } },
       500,
     );
+  });
+
+  // Password gate — when project-root pwd.txt is non-empty, all /api/v1/* routes
+  // (except auth status/login/logout) require a valid session cookie.
+  app.use("/api/v1/*", async (c, next) => {
+    const path = c.req.path;
+    if (isStudioAuthPublicPath(path)) {
+      await next();
+      return;
+    }
+    const password = await loadStudioPassword(root);
+    if (!password) {
+      await next();
+      return;
+    }
+    const token = getCookie(c, STUDIO_AUTH_COOKIE);
+    if (!isAuthenticatedStudioSession(token, password)) {
+      return c.json(
+        {
+          error: {
+            code: "AUTH_REQUIRED",
+            message: "Authentication required. Enter the password to continue.",
+          },
+        },
+        401,
+      );
+    }
+    await next();
+  });
+
+  app.get("/api/v1/auth/status", async (c) => {
+    const password = await loadStudioPassword(root);
+    if (!password) {
+      return c.json({ required: false, authenticated: true });
+    }
+    const token = getCookie(c, STUDIO_AUTH_COOKIE);
+    return c.json({
+      required: true,
+      authenticated: isAuthenticatedStudioSession(token, password),
+    });
+  });
+
+  app.post("/api/v1/auth/login", async (c) => {
+    const password = await loadStudioPassword(root);
+    if (!password) {
+      return c.json({ ok: true, required: false });
+    }
+    let body: { password?: unknown } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      throw new ApiError(400, "INVALID_BODY", "Request body must be JSON.");
+    }
+    const submitted = typeof body.password === "string" ? body.password : "";
+    if (!safeEqualString(submitted, password)) {
+      throw new ApiError(401, "INVALID_PASSWORD", "Incorrect password.");
+    }
+    setCookie(c, STUDIO_AUTH_COOKIE, deriveStudioAuthToken(password), {
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    return c.json({ ok: true, required: true });
+  });
+
+  app.post("/api/v1/auth/logout", async (c) => {
+    deleteCookie(c, STUDIO_AUTH_COOKIE, { path: "/" });
+    return c.json({ ok: true });
   });
 
   // BookId validation middleware — blocks path traversal on all book routes

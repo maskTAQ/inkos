@@ -90,6 +90,11 @@ export function useSSE(url = "/api/v1/events") {
   const seqRef = useRef(0);
 
   useEffect(() => {
+    if (!url) {
+      setConnected(false);
+      return;
+    }
+
     const es = new EventSource(url);
     esRef.current = es;
 

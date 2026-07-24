@@ -6048,4 +6048,101 @@ describe("createStudioServer daemon lifecycle", () => {
     });
   });
 
+
+describe("studio password auth", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "inkos-studio-auth-"));
+    await writeFile(join(root, "inkos.json"), JSON.stringify(projectConfig, null, 2), "utf-8");
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("stays open when pwd.txt is missing", async () => {
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const status = await app.request("http://localhost/api/v1/auth/status");
+    expect(status.status).toBe(200);
+    await expect(status.json()).resolves.toEqual({ required: false, authenticated: true });
+
+    const project = await app.request("http://localhost/api/v1/project");
+    expect(project.status).toBe(200);
+  });
+
+  it("blocks APIs until the correct password is posted", async () => {
+    await writeFile(join(root, "pwd.txt"), "correct-horse\n", "utf-8");
+    const { createStudioServer } = await import("./server.js");
+    const { STUDIO_AUTH_COOKIE, deriveStudioAuthToken } = await import("./auth.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const blocked = await app.request("http://localhost/api/v1/project");
+    expect(blocked.status).toBe(401);
+    await expect(blocked.json()).resolves.toMatchObject({
+      error: { code: "AUTH_REQUIRED" },
+    });
+
+    const status = await app.request("http://localhost/api/v1/auth/status");
+    expect(status.status).toBe(200);
+    await expect(status.json()).resolves.toEqual({ required: true, authenticated: false });
+
+    const wrong = await app.request("http://localhost/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "wrong" }),
+    });
+    expect(wrong.status).toBe(401);
+
+    const login = await app.request("http://localhost/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "correct-horse" }),
+    });
+    expect(login.status).toBe(200);
+    const setCookie = login.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain(`${STUDIO_AUTH_COOKIE}=`);
+    expect(setCookie).toContain(deriveStudioAuthToken("correct-horse"));
+
+    const cookieHeader = setCookie.split(";")[0]!;
+    const authed = await app.request("http://localhost/api/v1/project", {
+      headers: { Cookie: cookieHeader },
+    });
+    expect(authed.status).toBe(200);
+
+    const authedStatus = await app.request("http://localhost/api/v1/auth/status", {
+      headers: { Cookie: cookieHeader },
+    });
+    await expect(authedStatus.json()).resolves.toEqual({ required: true, authenticated: true });
+  });
+
+  it("clears the session cookie on logout", async () => {
+    await writeFile(join(root, "pwd.txt"), "secret", "utf-8");
+    const { createStudioServer } = await import("./server.js");
+    const { STUDIO_AUTH_COOKIE, deriveStudioAuthToken } = await import("./auth.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const login = await app.request("http://localhost/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "secret" }),
+    });
+    expect(login.status).toBe(200);
+
+    const logout = await app.request("http://localhost/api/v1/auth/logout", { method: "POST" });
+    expect(logout.status).toBe(200);
+    const setCookie = logout.headers.get("set-cookie") ?? "";
+    expect(setCookie.toLowerCase()).toContain(`${STUDIO_AUTH_COOKIE.toLowerCase()}=`);
+    // deleted cookies typically expire in the past or have Max-Age=0
+    expect(setCookie.toLowerCase()).toMatch(/max-age=0|expires=/);
+
+    const stillBlocked = await app.request("http://localhost/api/v1/project", {
+      headers: { Cookie: `${STUDIO_AUTH_COOKIE}=${deriveStudioAuthToken("wrong")}` },
+    });
+    expect(stillBlocked.status).toBe(401);
+  });
+});
+
 });
