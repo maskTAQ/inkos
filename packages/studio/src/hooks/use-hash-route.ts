@@ -17,7 +17,7 @@ export type HashRoute =
   | { page: "genres" }
   | { page: "style" }
   | { page: "translation" }
-  | { page: "import"; tab?: "chapters" | "canon" | "fanfic" | "spinoff" | "imitation" }
+  | { page: "import"; tab?: "wizard" | "chapters" | "canon" | "fanfic" | "spinoff" | "imitation" }
   | { page: "radar" }
   | { page: "doctor" }
   | { page: "play"; projectId: string }
@@ -33,10 +33,10 @@ function parseHash(hash: string): HashRoute {
   if (path === "chat") return { page: "chat" };
   if (path === "config" || path === "services") return { page: "services" };
   if (path === "settings") return { page: "project-settings" };
-  if (path === "import") return { page: "import" };
+  if (path === "import") return { page: "import", tab: "wizard" };
   if (path === "translation") return { page: "translation" };
-  const importMatch = path.match(/^import\/(chapters|canon|fanfic|spinoff|imitation)$/);
-  if (importMatch) return { page: "import", tab: importMatch[1] as "chapters" | "canon" | "fanfic" | "spinoff" | "imitation" };
+  const importMatch = path.match(/^import\/(wizard|chapters|canon|fanfic|spinoff|imitation)$/);
+  if (importMatch) return { page: "import", tab: importMatch[1] as "wizard" | "chapters" | "canon" | "fanfic" | "spinoff" | "imitation" };
   if (path === "book/new") return { page: "book-create" };
 
   const serviceMatch = path.match(/^services\/([^/]+)$/);

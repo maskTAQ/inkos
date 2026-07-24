@@ -5,8 +5,9 @@ import type { TFunction } from "../hooks/use-i18n";
 import { useI18n } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
 import { tr } from "../lib/app-language";
-import { FileInput, BookCopy, Feather, BookMarked, Wand2 } from "lucide-react";
+import { FileInput, BookCopy, Feather, BookMarked, Wand2, Sparkles } from "lucide-react";
 import { waitForStudioBookReady } from "../lib/book-ready";
+import { ImportExistingWizard } from "./ImportExistingWizard";
 
 interface BookSummary {
   readonly id: string;
@@ -15,17 +16,17 @@ interface BookSummary {
 
 interface Nav { toDashboard: () => void; toBook: (bookId: string) => void }
 
-type Tab = "chapters" | "canon" | "fanfic" | "spinoff" | "imitation";
+type Tab = "wizard" | "chapters" | "canon" | "fanfic" | "spinoff" | "imitation";
 
-export function ImportManager({ nav, theme, t, initialTab }: { nav: Nav; theme: Theme; t: TFunction; initialTab?: Tab }) {
+export function ImportManager({ nav, theme, t, initialTab }: { nav: Nav; theme: Theme; t: TFunction; initialTab?: Exclude<Tab, "wizard"> | "wizard" }) {
   const c = useColors(theme);
   const { lang } = useI18n();
   const { data: booksData } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
-  const [tab, setTab] = useState<Tab>(initialTab ?? "chapters");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "wizard");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Chapters state
+  // Chapters state (legacy quick form)
   const [chText, setChText] = useState("");
   const [chBookId, setChBookId] = useState("");
   const [chSplitRegex, setChSplitRegex] = useState("");
@@ -155,6 +156,7 @@ export function ImportManager({ nav, theme, t, initialTab }: { nav: Nav; theme: 
   };
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "wizard", label: t("import.wizardTab"), icon: <Sparkles size={14} /> },
     { id: "chapters", label: t("import.chapters"), icon: <FileInput size={14} /> },
     { id: "canon", label: t("import.canon"), icon: <BookCopy size={14} /> },
     { id: "fanfic", label: t("import.fanfic"), icon: <Feather size={14} /> },
@@ -176,7 +178,7 @@ export function ImportManager({ nav, theme, t, initialTab }: { nav: Nav; theme: 
       </h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-secondary/30 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-secondary/30 rounded-lg p-1 w-fit flex-wrap">
         {tabs.map((tb) => (
           <button
             key={tb.id}
@@ -191,9 +193,13 @@ export function ImportManager({ nav, theme, t, initialTab }: { nav: Nav; theme: 
       </div>
 
       {/* Tab content */}
-      <div className={`border ${c.cardStatic} rounded-lg p-6 space-y-4`}>
+      <div className={tab === "wizard" ? "" : `border ${c.cardStatic} rounded-lg p-6 space-y-4`}>
+        {tab === "wizard" && (
+          <ImportExistingWizard nav={nav} theme={theme} t={t} />
+        )}
         {tab === "chapters" && (
           <>
+            <p className="text-xs text-muted-foreground">{t("import.legacyChaptersHint")}</p>
             <select value={chBookId} onChange={(e) => setChBookId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-secondary/30 border border-border text-sm">
               <option value="">{t("import.selectTarget")}</option>

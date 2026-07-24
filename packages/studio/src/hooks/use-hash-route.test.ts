@@ -49,6 +49,8 @@ describe("hash route", () => {
 
     it("parses import tab routes", () => {
       expect(parseHash("#/import/fanfic")).toEqual({ page: "import", tab: "fanfic" });
+      expect(parseHash("#/import")).toEqual({ page: "import", tab: "wizard" });
+      expect(parseHash("#/import/wizard")).toEqual({ page: "import", tab: "wizard" });
     });
 
     it("parses #/translation", () => {

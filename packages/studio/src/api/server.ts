@@ -138,6 +138,14 @@ import {
   loadStudioPassword,
   safeEqualString,
 } from "./auth.js";
+import {
+  buildSplitPreview,
+  mergeImportSources,
+  normalizeImportMode,
+  resolveResumeFrom,
+  type ImportChapterDraft,
+  type ImportWizardBookMeta,
+} from "./import-wizard.js";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 
 // -- Studio server language (read per request from the project config's `language`) --
@@ -5909,25 +5917,181 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     }
   });
 
-  // --- Import Chapters ---
+  // --- Import Chapters (preview + one-stop wizard + legacy path) ---
+
+  app.post("/api/v1/import/chapters/preview", async (c) => {
+    const body = await c.req.json<{
+      text?: string;
+      splitRegex?: string;
+      chapters?: ReadonlyArray<ImportChapterDraft>;
+    }>();
+    const { splitChapters } = await import("@actalk/inkos-core");
+    const chapters = mergeImportSources({
+      text: body.text,
+      splitRegex: body.splitRegex,
+      chapters: body.chapters,
+      splitChapters,
+    });
+    return c.json(buildSplitPreview(chapters));
+  });
+
+  app.post("/api/v1/import/chapters", async (c) => {
+    const body = await c.req.json<{
+      text?: string;
+      splitRegex?: string;
+      chapters?: ReadonlyArray<ImportChapterDraft>;
+      resumeFrom?: number;
+      importMode?: "continuation" | "series";
+      bookId?: string;
+      createBook?: ImportWizardBookMeta;
+    }>();
+
+    const { splitChapters, deriveBookIdFromTitle } = await import("@actalk/inkos-core");
+    const chapters = mergeImportSources({
+      text: body.text,
+      splitRegex: body.splitRegex,
+      chapters: body.chapters,
+      splitChapters,
+    });
+    if (chapters.length === 0) {
+      return c.json({ error: { code: "NO_CHAPTERS", message: "No chapters to import. Provide text or chapters." } }, 400);
+    }
+
+    let bookId = typeof body.bookId === "string" ? body.bookId.trim() : "";
+    let createdBook = false;
+
+    if (!bookId) {
+      const meta = body.createBook;
+      if (!meta?.title?.trim() || !meta.genre?.trim()) {
+        return c.json({
+          error: {
+            code: "BOOK_REQUIRED",
+            message: "Provide bookId or createBook with title and genre.",
+          },
+        }, 400);
+      }
+      const now = new Date().toISOString();
+      const draft = buildStudioBookConfig({
+        title: meta.title.trim(),
+        genre: meta.genre.trim(),
+        language: meta.language,
+        platform: meta.platform,
+        targetChapters: meta.targetChapters,
+        chapterWordCount: meta.chapterWordCount,
+        blurb: meta.blurb,
+      }, now);
+      bookId = draft.id || deriveBookIdFromTitle(meta.title.trim());
+      if (!bookId) {
+        return c.json({ error: { code: "INVALID_TITLE", message: "Could not derive a valid book id from title." } }, 400);
+      }
+      if (!isSafeBookId(bookId)) {
+        return c.json({ error: { code: "INVALID_BOOK_ID", message: `Invalid book id: ${bookId}` } }, 400);
+      }
+      const bookDir = state.bookDir(bookId);
+      if (await completeBookExists(bookDir)) {
+        return c.json({ error: { code: "BOOK_EXISTS", message: `Book "${bookId}" already exists.` } }, 409);
+      }
+      await mkdir(bookDir, { recursive: true });
+      await writeFile(join(bookDir, "book.json"), JSON.stringify(draft, null, 2), "utf-8");
+      createdBook = true;
+    } else if (!isSafeBookId(bookId)) {
+      return c.json({ error: { code: "INVALID_BOOK_ID", message: `Invalid book id: ${bookId}` } }, 400);
+    }
+
+    try {
+      const nextChapterNumber = await state.getNextChapterNumber(bookId);
+      const existingChapterCount = Math.max(0, nextChapterNumber - 1);
+      const resumeFrom = resolveResumeFrom({
+        existingChapterCount,
+        resumeFrom: body.resumeFrom,
+      });
+      const importMode = normalizeImportMode(body.importMode);
+
+      broadcast("import:start", { bookId, type: "chapters", createdBook, chapterCount: chapters.length });
+      const pipeline = new PipelineRunner(await buildPipelineConfig());
+      const result = await pipeline.importChapters({
+        bookId,
+        chapters,
+        ...(resumeFrom !== undefined ? { resumeFrom } : {}),
+        importMode,
+      });
+      broadcast("import:complete", {
+        bookId,
+        type: "chapters",
+        count: result.importedCount,
+        createdBook,
+      });
+      if (createdBook) {
+        const book = await loadStudioBookListSummary(state, bookId).catch(() => undefined);
+        broadcast("book:created", { bookId, ...(book ? { book } : {}) });
+      }
+      return c.json({
+        ...result,
+        bookId,
+        createdBook,
+        importMode,
+        chapterCount: chapters.length,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      broadcast("import:error", { bookId, error: message });
+      if (/resumeFrom|already has/i.test(message)) {
+        return c.json({ error: { code: "RESUME_REQUIRED", message } }, 409);
+      }
+      return c.json({ error: { code: "IMPORT_FAILED", message } }, 500);
+    }
+  });
 
   app.post("/api/v1/books/:id/import/chapters", async (c) => {
     const id = c.req.param("id");
-    const { text, splitRegex } = await c.req.json<{ text: string; splitRegex?: string }>();
-    if (!text?.trim()) return c.json({ error: "text is required" }, 400);
+    const body = await c.req.json<{
+      text?: string;
+      splitRegex?: string;
+      chapters?: ReadonlyArray<ImportChapterDraft>;
+      resumeFrom?: number;
+      importMode?: "continuation" | "series";
+    }>();
+    if (!body.text?.trim() && !(body.chapters && body.chapters.length > 0)) {
+      return c.json({ error: "text is required" }, 400);
+    }
 
     broadcast("import:start", { bookId: id, type: "chapters" });
     try {
       const { splitChapters } = await import("@actalk/inkos-core");
-      const chapters = [...splitChapters(text, splitRegex)];
+      const chapters = mergeImportSources({
+        text: body.text,
+        splitRegex: body.splitRegex,
+        chapters: body.chapters,
+        splitChapters,
+      });
+      if (chapters.length === 0) {
+        return c.json({ error: "No chapters detected in text" }, 400);
+      }
+
+      const nextChapterNumber = await state.getNextChapterNumber(id);
+      const existingChapterCount = Math.max(0, nextChapterNumber - 1);
+      const resumeFrom = resolveResumeFrom({
+        existingChapterCount,
+        resumeFrom: body.resumeFrom,
+      });
+      const importMode = normalizeImportMode(body.importMode);
 
       const pipeline = new PipelineRunner(await buildPipelineConfig());
-      const result = await pipeline.importChapters({ bookId: id, chapters });
+      const result = await pipeline.importChapters({
+        bookId: id,
+        chapters,
+        ...(resumeFrom !== undefined ? { resumeFrom } : {}),
+        importMode,
+      });
       broadcast("import:complete", { bookId: id, type: "chapters", count: result.importedCount });
       return c.json(result);
     } catch (e) {
-      broadcast("import:error", { bookId: id, error: String(e) });
-      return c.json({ error: String(e) }, 500);
+      const message = e instanceof Error ? e.message : String(e);
+      broadcast("import:error", { bookId: id, error: message });
+      if (/resumeFrom|already has/i.test(message)) {
+        return c.json({ error: { code: "RESUME_REQUIRED", message } }, 409);
+      }
+      return c.json({ error: message }, 500);
     }
   });
 

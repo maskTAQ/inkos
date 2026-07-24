@@ -130,7 +130,7 @@ export function App() {
     toGenres: () => setRoute({ page: "genres" }),
     toStyle: () => setRoute({ page: "style" }),
     toTranslation: () => setRoute({ page: "translation" }),
-    toImport: (tab?: "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => setRoute({ page: "import", ...(tab ? { tab } : {}) }),
+    toImport: (tab?: "wizard" | "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => setRoute({ page: "import", tab: tab ?? "wizard" }),
     toRadar: () => setRoute({ page: "radar" }),
     toDoctor: () => setRoute({ page: "doctor" }),
     toPlay: (projectId: string) => setRoute({ page: "play", projectId }),

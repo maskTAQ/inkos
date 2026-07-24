@@ -22,6 +22,8 @@ export interface ChatPageSessionSummary {
 
 const BOOK_CREATE_SESSION_KEY = "inkos.book-create.session-id";
 const PROJECT_CHAT_SESSION_KEY = "inkos.project-chat.session-id";
+/** Last model the user picked in the chat composer — restored after refresh. */
+export const CHAT_MODEL_SELECTION_KEY = "inkos.chat.model-selection";
 
 export function getBookCreateSessionId(): string | null {
   return globalThis.localStorage?.getItem(BOOK_CREATE_SESSION_KEY) ?? null;
@@ -41,6 +43,46 @@ export function getProjectChatSessionId(): string | null {
 
 export function setProjectChatSessionId(sessionId: string): void {
   globalThis.localStorage?.setItem(PROJECT_CHAT_SESSION_KEY, sessionId);
+}
+
+export function getChatModelSelection(): ChatPageModelPreference | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(CHAT_MODEL_SELECTION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { model?: unknown; service?: unknown };
+    const model = typeof parsed.model === "string" && parsed.model.trim()
+      ? parsed.model.trim()
+      : null;
+    const service = typeof parsed.service === "string" && parsed.service.trim()
+      ? parsed.service.trim()
+      : null;
+    if (!model && !service) return null;
+    return { model, service };
+  } catch {
+    return null;
+  }
+}
+
+export function setChatModelSelection(model: string, service: string): void {
+  try {
+    const nextModel = model.trim();
+    const nextService = service.trim();
+    if (!nextModel || !nextService) return;
+    globalThis.localStorage?.setItem(
+      CHAT_MODEL_SELECTION_KEY,
+      JSON.stringify({ model: nextModel, service: nextService }),
+    );
+  } catch {
+    // private mode / quota — keep in-memory selection only
+  }
+}
+
+export function clearChatModelSelection(): void {
+  try {
+    globalThis.localStorage?.removeItem(CHAT_MODEL_SELECTION_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export function filterModelGroups(

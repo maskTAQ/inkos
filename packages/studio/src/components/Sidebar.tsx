@@ -84,7 +84,7 @@ interface Nav {
   toGenres: () => void;
   toStyle: () => void;
   toTranslation: () => void;
-  toImport: (tab?: "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => void;
+  toImport: (tab?: "wizard" | "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => void;
   toRadar: () => void;
   toDoctor: () => void;
   toFilmStudio: (id: string) => void;
@@ -317,7 +317,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
             <CreateItem icon={<Feather size={16} />} label={t("nav.createFanfic")} onClick={() => nav.toImport("fanfic")} />
             <CreateItem icon={<BookCopy size={16} />} label={t("nav.createSpinoff")} onClick={() => nav.toImport("spinoff")} />
             <CreateItem icon={<Wand2 size={16} />} label={t("nav.createImitation")} onClick={() => nav.toImport("imitation")} />
-            <CreateItem icon={<FileInput size={16} />} label={t("nav.createContinuation")} onClick={() => nav.toImport("chapters")} />
+            <CreateItem icon={<FileInput size={16} />} label={t("nav.createContinuation")} onClick={() => nav.toImport("wizard")} />
             <CreateItem icon={<Languages size={16} />} label={t("nav.createTranslation")} active={activePage === "translation"} onClick={nav.toTranslation} />
             <CreateItem icon={<GitBranch size={16} />} label={t("nav.createBranching")} onClick={() => launchProjectMode("play", "guided")} />
             <CreateItem icon={<Gamepad2 size={16} />} label={t("nav.createFree")} onClick={() => launchProjectMode("play", "open")} />

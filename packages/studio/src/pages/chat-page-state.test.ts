@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearBookCreateSessionId,
+  clearChatModelSelection,
   filterModelGroups,
   getBookCreateSessionId,
+  getChatModelSelection,
   getChatScrollBehavior,
   getProjectChatSessionId,
   pickModelSelection,
   pickProjectChatSessionId,
   setBookCreateSessionId,
+  setChatModelSelection,
   setProjectChatSessionId,
   isChatScrollNearBottom,
   shouldShowPlayChoicePanel,
@@ -68,6 +71,29 @@ describe("book-create session localStorage helpers", () => {
     setProjectChatSessionId("project-chat-session");
     expect(getBookCreateSessionId()).toBe("book-create-session");
     expect(getProjectChatSessionId()).toBe("project-chat-session");
+  });
+
+  it("persists the last chat model selection across reloads", () => {
+    expect(getChatModelSelection()).toBeNull();
+    setChatModelSelection("kimi-k2.5", "moonshot");
+    expect(getChatModelSelection()).toEqual({
+      model: "kimi-k2.5",
+      service: "moonshot",
+    });
+    setChatModelSelection("gemini-2.5-flash", "google");
+    expect(getChatModelSelection()).toEqual({
+      model: "gemini-2.5-flash",
+      service: "google",
+    });
+    clearChatModelSelection();
+    expect(getChatModelSelection()).toBeNull();
+  });
+
+  it("ignores corrupt chat model selection payloads", () => {
+    storage.set("inkos.chat.model-selection", "{not-json");
+    expect(getChatModelSelection()).toBeNull();
+    storage.set("inkos.chat.model-selection", JSON.stringify({ model: 1, service: true }));
+    expect(getChatModelSelection()).toBeNull();
   });
 });
 
@@ -156,6 +182,16 @@ describe("pickModelSelection", () => {
   });
 
   it("prefers the configured service and model when there is no current selection", () => {
+    expect(pickModelSelection(grouped, null, null, {
+      service: "moonshot",
+      model: "kimi-k2.5",
+    })).toEqual({
+      model: "kimi-k2.5",
+      service: "moonshot",
+    });
+  });
+
+  it("restores a stored browser preference ahead of the first listed model", () => {
     expect(pickModelSelection(grouped, null, null, {
       service: "moonshot",
       model: "kimi-k2.5",

@@ -1,4 +1,4 @@
-import { memo, useRef, useEffect, useMemo, useState } from "react";
+import { memo, useRef, useEffect, useMemo, useState, useCallback } from "react";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import type { SSEMessage } from "../hooks/use-sse";
@@ -52,10 +52,12 @@ import {
   filterModelGroups,
   getChatScrollBehavior,
   getBookCreateSessionId,
+  getChatModelSelection,
   getProjectChatSessionId,
   pickProjectChatSessionId,
   pickModelSelection,
   setBookCreateSessionId,
+  setChatModelSelection,
   setProjectChatSessionId,
   isChatScrollNearBottom,
   shouldShowPlayChoicePanel,
@@ -75,7 +77,7 @@ interface Nav {
   toDashboard: () => void;
   toBook: (id: string) => void;
   toServices: () => void;
-  toImport: (tab?: "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => void;
+  toImport: (tab?: "wizard" | "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => void;
   toStyle: () => void;
   toFilm: (projectId: string) => void;
   toFilmStudio: (projectId: string) => void;
@@ -566,14 +568,20 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
     return group ? `${group.label} · ${modelLabel}` : modelLabel;
   }, [groupedModels, selectedModel, selectedService, isZh]);
 
-  // Auto-select from saved service config first, then fall back to the first available model.
+  // Restore last user-picked model (localStorage) first, then service default, then first available.
+  // Only write localStorage on explicit picker selection — auto-fallback must not overwrite a stored choice.
+  const handleSelectModel = useCallback((model: string, service: string) => {
+    setChatModelSelection(model, service);
+    setSelectedModel(model, service);
+  }, [setSelectedModel]);
+
   useEffect(() => {
     if (!serviceConfigLoaded) return;
     const nextSelection = pickModelSelection(
       groupedModels,
       selectedModel,
       selectedService,
-      configuredModelSelection,
+      getChatModelSelection() ?? configuredModelSelection,
     );
     if (nextSelection) {
       setSelectedModel(nextSelection.model, nextSelection.service);
@@ -783,7 +791,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
       : undefined;
     if (details.targetRoute) {
       if (details.targetRoute === "import:fanfic") nav.toImport("fanfic");
-      else if (details.targetRoute === "import:chapters") nav.toImport("chapters");
+      else if (details.targetRoute === "import:chapters") nav.toImport("wizard");
       else if (details.targetRoute === "import:canon") nav.toImport("canon");
       else if (details.targetRoute === "import:spinoff") nav.toImport("spinoff");
       else if (details.targetRoute === "import:imitation") nav.toImport("imitation");
@@ -1259,7 +1267,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
                       groupedModels={groupedModels}
                       selectedModel={selectedModel}
                       selectedService={selectedService}
-                      onSelect={setSelectedModel}
+                      onSelect={handleSelectModel}
                       onManage={() => nav.toServices()}
                     />
                   </DropdownMenu>
