@@ -25,6 +25,7 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
+    "start": "node ../../scripts/start-studio.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
