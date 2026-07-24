@@ -48,6 +48,7 @@ import {
   Rows3,
   Film,
   Languages,
+  X,
 } from "lucide-react";
 import { InkosLogo } from "./InkosLogo";
 
@@ -90,11 +91,14 @@ interface Nav {
   toFilmStudio: (id: string) => void;
 }
 
-export function Sidebar({ nav, activePage, sse, t }: {
+export function Sidebar({ nav: baseNav, activePage, sse, t, mobileOpen = false, onMobileClose }: {
   nav: Nav;
   activePage: string;
   sse: { messages: ReadonlyArray<SSEMessage> };
   t: TFunction;
+  /** When true on small screens, show the nav drawer. Ignored at lg+. */
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }) {
   const { data, refetch: refetchBooks, mutate: mutateBooks } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
   const { data: filmsData, refetch: refetchFilms } = useApi<{ films: ReadonlyArray<{ projectId: string; title: string }> }>("/interactive-films");
@@ -283,19 +287,66 @@ export function Sidebar({ nav, activePage, sse, t }: {
     setDeleteTarget(null);
   };
 
+  // Wrap navigation so mobile drawer closes after any nav click.
+  const closeMobile = () => { onMobileClose?.(); };
+  const nav: Nav = {
+    toDashboard: () => { closeMobile(); baseNav.toDashboard(); },
+    toChat: () => { closeMobile(); baseNav.toChat(); },
+    toBook: (id) => { closeMobile(); baseNav.toBook(id); },
+    toBookCreate: () => { closeMobile(); baseNav.toBookCreate(); },
+    toServices: () => { closeMobile(); baseNav.toServices(); },
+    toProjectSettings: () => { closeMobile(); baseNav.toProjectSettings(); },
+    toDaemon: () => { closeMobile(); baseNav.toDaemon(); },
+    toLogs: () => { closeMobile(); baseNav.toLogs(); },
+    toGenres: () => { closeMobile(); baseNav.toGenres(); },
+    toStyle: () => { closeMobile(); baseNav.toStyle(); },
+    toTranslation: () => { closeMobile(); baseNav.toTranslation(); },
+    toImport: (tab) => { closeMobile(); baseNav.toImport(tab); },
+    toRadar: () => { closeMobile(); baseNav.toRadar(); },
+    toDoctor: () => { closeMobile(); baseNav.toDoctor(); },
+    toFilmStudio: (id) => { closeMobile(); baseNav.toFilmStudio(id); },
+  };
+
   return (
-    <aside className="w-[260px] shrink-0 border-r border-border bg-background/80 backdrop-blur-md flex flex-col h-full overflow-hidden select-none">
+    <>
+      {/* Mobile scrim */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity lg:hidden ${
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={closeMobile}
+        aria-hidden={!mobileOpen}
+      />
+
+      <aside
+        className={`
+          w-[min(288px,88vw)] shrink-0 border-r border-border bg-background/95 backdrop-blur-md
+          flex flex-col h-full overflow-hidden select-none
+          fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out
+          lg:static lg:z-auto lg:w-[260px] lg:translate-x-0 lg:bg-background/80
+          ${mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"}
+        `}
+        aria-label="Primary"
+      >
       {/* Logo Area */}
-      <div className="px-6 py-8">
+      <div className="px-5 py-5 sm:px-6 sm:py-8 flex items-start justify-between gap-2">
         <button
           onClick={nav.toDashboard}
-          className="group flex items-center gap-3 hover:opacity-80 transition-all duration-300"
+          className="group flex items-center gap-3 hover:opacity-80 transition-all duration-300 min-w-0"
         >
-          <InkosLogo className="w-11 h-11 shrink-0 group-hover:scale-105 transition-transform" />
-          <div className="flex flex-col">
-            <span className="font-serif text-[27px] leading-none italic font-medium">InkOS</span>
-            <span className="text-[13px] uppercase tracking-[0.22em] text-muted-foreground font-bold mt-1.5">Studio</span>
+          <InkosLogo className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 group-hover:scale-105 transition-transform" />
+          <div className="flex flex-col min-w-0">
+            <span className="font-serif text-[24px] sm:text-[27px] leading-none italic font-medium">InkOS</span>
+            <span className="text-[12px] sm:text-[13px] uppercase tracking-[0.22em] text-muted-foreground font-bold mt-1.5">Studio</span>
           </div>
+        </button>
+        <button
+          type="button"
+          onClick={closeMobile}
+          className="lg:hidden shrink-0 mt-1 rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+          aria-label={tr("关闭菜单", "Close menu")}
+        >
+          <X size={18} />
         </button>
       </div>
 
@@ -712,6 +763,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
         onCancel={() => setDeleteTarget(null)}
       />
     </aside>
+    </>
   );
 }
 

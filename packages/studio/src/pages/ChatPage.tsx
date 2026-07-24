@@ -935,7 +935,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
             scrollHeight: target.scrollHeight,
           });
         }}
-        className={`chat-message-scroll flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-6 transition-[padding] duration-200 ${worldPanelInsetClass}`}
+        className={`chat-message-scroll flex-1 overflow-y-auto [scrollbar-gutter:stable] px-3 sm:px-4 py-4 sm:py-6 transition-[padding] duration-200 ${worldPanelInsetClass}`}
       >
         {needsPlayModeChoice ? (
           <div className="h-full flex flex-col items-center justify-center text-center select-none gap-4">
@@ -1125,7 +1125,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
         </div>
       ) : null}
       {needsPlayModeChoice ? null : (
-      <div className={`shrink-0 border-t border-border/40 px-4 py-3 transition-[padding] duration-200 ${worldPanelInsetClass}`}>
+      <div className={`shrink-0 border-t border-border/40 px-3 sm:px-4 py-2.5 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[padding] duration-200 ${worldPanelInsetClass}`}>
         <div className="max-w-3xl mx-auto">
           <div className="flex items-start gap-2">
             <div className="relative flex-1 rounded-xl bg-secondary/30 transition-all">
